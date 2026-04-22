@@ -39,22 +39,37 @@ export default async function NotePage({ params }: Props) {
 
   const rawUrl = `/api/notes/${note.id}/raw`;
 
+  const navBar = (
+    <header className="sticky top-0 z-20 border-b border-[color:var(--color-line)] bg-[color:var(--color-surface)]/95 backdrop-blur">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-3 flex items-center gap-3">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1 text-[12px] text-[color:var(--color-dim)] hover:text-[color:var(--color-ink)]"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+          All notes
+        </Link>
+        <div className="flex items-center gap-2 ml-auto">
+          <ViewerActions id={note.id} rawUrl={rawUrl} />
+        </div>
+      </div>
+    </header>
+  );
+
+  // For HTML notes we preserve the original document verbatim — nav bar at top,
+  // original HTML below full-bleed, no title card or outer chrome.
+  if (note.kind === "html") {
+    return (
+      <div className="min-h-screen">
+        {navBar}
+        <HtmlViewer rawUrl={rawUrl} title={note.title} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-[color:var(--color-line)] bg-[color:var(--color-surface)]/95 backdrop-blur">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6 py-3 flex items-center gap-3">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1 text-[12px] text-[color:var(--color-dim)] hover:text-[color:var(--color-ink)]"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-            All notes
-          </Link>
-          <div className="flex items-center gap-2 ml-auto">
-            <ViewerActions id={note.id} rawUrl={rawUrl} />
-          </div>
-        </div>
-      </header>
+      {navBar}
 
       <main className="mx-auto max-w-4xl px-4 sm:px-6 py-6 sm:py-10">
         <div className="flex items-start gap-3 mb-6 pb-5 border-b border-[color:var(--color-line)]">
@@ -82,8 +97,6 @@ export default async function NotePage({ params }: Props) {
             dangerouslySetInnerHTML={{ __html: renderedHtml }}
           />
         )}
-
-        {note.kind === "html" && <HtmlViewer rawUrl={rawUrl} title={note.title} />}
 
         {note.kind === "pdf" && <PdfViewer rawUrl={rawUrl} title={note.title} />}
       </main>

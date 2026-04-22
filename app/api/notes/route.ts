@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { createNote, listNotes } from "@/lib/storage";
 import { MAX_UPLOAD_BYTES, sanitizeFilename } from "@/lib/types";
+import { isAuthedRequest, isConfigured } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +13,15 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Admin-only. If auth isn't configured at all (legacy/local dev), uploads stay open
+  // so the tool remains usable; once credentials are set, only signed-in admins pass.
+  if (isConfigured() && !isAuthedRequest(req)) {
+    return NextResponse.json(
+      { error: "Uploads are admin-only. Sign in at /admin/login." },
+      { status: 401 },
+    );
+  }
+
   const contentType = req.headers.get("content-type") || "";
   if (!contentType.includes("multipart/form-data")) {
     return NextResponse.json(
@@ -43,6 +54,19 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
+  const contentHash = createHash("sha256").update(buffer).digest("hex");
+
+  const existing = await listNotes();
+  const duplicate = existing.find((n) => n.contentHash === contentHash);
+  if (duplicate) {
+    return NextResponse.json(
+      {
+        error: `Already uploaded as “${duplicate.title}”.`,
+        existing: duplicate,
+      },
+      { status: 409 },
+    );
+  }
 
   try {
     const note = await createNote({
@@ -50,6 +74,7 @@ export async function POST(req: NextRequest) {
       mimeType: file.type,
       title,
       data: buffer,
+      contentHash,
     });
     return NextResponse.json({ note }, { status: 201 });
   } catch (err) {

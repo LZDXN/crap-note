@@ -11,6 +11,8 @@ export interface NoteRecord {
   size: number;
   createdAt: string;
   updatedAt: string;
+  /** SHA-256 hex of the stored bytes. Used to reject duplicate uploads. Optional for records written before dedup existed. */
+  contentHash?: string;
   /** Set when the note is stored in Vercel Blob. Undefined for filesystem-backed notes. */
   blobUrl?: string;
   /** Set when the note is stored in Vercel Blob. The pathname within the blob store. */

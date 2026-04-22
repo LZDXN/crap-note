@@ -61,6 +61,7 @@ export async function createNote(opts: {
   mimeType: string;
   title?: string;
   data: Buffer;
+  contentHash?: string;
 }): Promise<NoteRecord> {
   const detected = kindFromName(opts.originalName, opts.mimeType);
   if (!detected) {
@@ -91,6 +92,7 @@ export async function createNote(opts: {
     size: opts.data.byteLength,
     createdAt: now,
     updatedAt: now,
+    contentHash: opts.contentHash,
   };
 
   const notes = await readDb();

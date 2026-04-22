@@ -4,23 +4,12 @@ import { kindFromName, mimeForKind, type NoteKind, type NoteRecord } from "../ty
 
 const INDEX_KEY = "notes/index.json";
 
-let indexPromise: Promise<NoteRecord[]> | null = null;
-
-async function fetchIndex(): Promise<NoteRecord[]> {
+async function loadIndex(): Promise<NoteRecord[]> {
   const result = await get(INDEX_KEY, { access: "private", useCache: false });
   if (!result || result.statusCode !== 200) return [];
   const text = await new Response(result.stream).text();
   const parsed = JSON.parse(text);
   return Array.isArray(parsed) ? (parsed as NoteRecord[]) : [];
-}
-
-async function loadIndex(force = false): Promise<NoteRecord[]> {
-  if (!force && indexPromise) return indexPromise;
-  indexPromise = fetchIndex().catch((err) => {
-    indexPromise = null;
-    throw err;
-  });
-  return indexPromise;
 }
 
 async function saveIndex(records: NoteRecord[]) {
@@ -31,7 +20,6 @@ async function saveIndex(records: NoteRecord[]) {
     allowOverwrite: true,
     cacheControlMaxAge: 0,
   });
-  indexPromise = Promise.resolve(records);
 }
 
 function slugify(input: string): string {
@@ -70,6 +58,7 @@ export async function createNote(opts: {
   mimeType: string;
   title?: string;
   data: Buffer;
+  contentHash?: string;
 }): Promise<NoteRecord> {
   const detected = kindFromName(opts.originalName, opts.mimeType);
   if (!detected) {
@@ -103,18 +92,19 @@ export async function createNote(opts: {
     size: opts.data.byteLength,
     createdAt: now,
     updatedAt: now,
+    contentHash: opts.contentHash,
     blobUrl: blob.url,
     blobPathname: blob.pathname,
   };
 
-  const notes = await loadIndex(true);
+  const notes = await loadIndex();
   notes.push(record);
   await saveIndex(notes);
   return record;
 }
 
 export async function deleteNote(id: string): Promise<boolean> {
-  const notes = await loadIndex(true);
+  const notes = await loadIndex();
   const idx = notes.findIndex((n) => n.id === id);
   if (idx === -1) return false;
   const [removed] = notes.splice(idx, 1);
@@ -130,7 +120,7 @@ export async function deleteNote(id: string): Promise<boolean> {
 }
 
 export async function updateNoteTitle(id: string, title: string): Promise<NoteRecord | null> {
-  const notes = await loadIndex(true);
+  const notes = await loadIndex();
   const note = notes.find((n) => n.id === id);
   if (!note) return null;
   const clean = title.trim().slice(0, 200);

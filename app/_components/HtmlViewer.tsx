@@ -49,7 +49,7 @@ export function HtmlViewer({ rawUrl, title }: Props) {
   }, [rawUrl]);
 
   return (
-    <div className="relative rounded-lg border border-[color:var(--color-line)] bg-white overflow-hidden">
+    <div className="relative bg-white">
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--color-bg)]/60 text-[12px] text-[color:var(--color-dim)]">
           Rendering…

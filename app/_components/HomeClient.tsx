@@ -1,30 +1,29 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type DragEvent } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import type { NoteRecord, StorageMode } from "@/lib/types";
 import { formatBytes, formatRelative, kindLabel } from "@/lib/format";
 import { KindIcon } from "./KindIcon";
 
+interface AuthState {
+  authenticated: boolean;
+  configured: boolean;
+}
+
 interface HomeClientProps {
   initialNotes: NoteRecord[];
   storageMode: StorageMode;
+  initialAuth: AuthState;
 }
 
-type Status =
-  | { type: "idle" }
-  | { type: "uploading"; name: string }
-  | { type: "error"; message: string }
-  | { type: "done"; id: string };
-
-export function HomeClient({ initialNotes, storageMode }: HomeClientProps) {
+export function HomeClient({ initialNotes, storageMode, initialAuth }: HomeClientProps) {
   const [notes, setNotes] = useState<NoteRecord[]>(initialNotes);
+  const [auth, setAuth] = useState<AuthState>(initialAuth);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "markdown" | "html" | "pdf">("all");
-  const [dragOver, setDragOver] = useState(false);
-  const [status, setStatus] = useState<Status>({ type: "idle" });
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const visibleNotes = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -38,40 +37,24 @@ export function HomeClient({ initialNotes, storageMode }: HomeClientProps) {
     });
   }, [notes, query, filter]);
 
-  const upload = useCallback(async (files: FileList | File[]) => {
-    const list = Array.from(files);
-    if (list.length === 0) return;
-    for (const file of list) {
-      setStatus({ type: "uploading", name: file.name });
-      const form = new FormData();
-      form.append("file", file);
-      try {
-        const res = await fetch("/api/notes", { method: "POST", body: form });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json?.error || "Upload failed.");
-        setNotes((prev) => [json.note, ...prev]);
-        setStatus({ type: "done", id: json.note.id });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Upload failed.";
-        setStatus({ type: "error", message: msg });
-        return;
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const [notesRes, sessionRes] = await Promise.all([
+        fetch("/api/notes", { cache: "no-store" }),
+        fetch("/api/auth/session", { cache: "no-store" }),
+      ]);
+      if (notesRes.ok) {
+        const { notes: fresh } = (await notesRes.json()) as { notes: NoteRecord[] };
+        setNotes(fresh);
       }
+      if (sessionRes.ok) {
+        const s = (await sessionRes.json()) as AuthState;
+        setAuth(s);
+      }
+    } finally {
+      setRefreshing(false);
     }
-  }, []);
-
-  const onDrop = useCallback(
-    (e: DragEvent<HTMLLabelElement>) => {
-      e.preventDefault();
-      setDragOver(false);
-      if (e.dataTransfer?.files?.length) void upload(e.dataTransfer.files);
-    },
-    [upload],
-  );
-
-  const handleDelete = useCallback(async (id: string) => {
-    if (!confirm("Delete this note? The shareable link will stop working.")) return;
-    const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
-    if (res.ok) setNotes((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
   const handleCopy = useCallback(async (id: string) => {
@@ -97,63 +80,46 @@ export function HomeClient({ initialNotes, storageMode }: HomeClientProps) {
               <em className="text-[color:var(--color-accent)] not-italic">Crap</em> Notes
             </h1>
           </div>
+          <div className="flex items-center gap-2">
+            {auth.configured && (
+              <Link
+                href={auth.authenticated ? "/admin" : "/admin/login"}
+                className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] border border-[color:var(--color-line)] rounded-lg px-3 py-1.5 transition-colors"
+              >
+                {auth.authenticated ? "Admin" : "Sign in"}
+              </Link>
+            )}
+            <button
+              onClick={refresh}
+              disabled={refreshing}
+              aria-label="Refresh notes"
+              title={`Storage: ${storageMode === "blob" ? "Vercel Blob" : "Local FS"}`}
+              className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] border border-[color:var(--color-line)] rounded-lg px-3 py-1.5 disabled:opacity-50 transition-colors"
+            >
+              <svg
+                className={refreshing ? "animate-spin" : ""}
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 12a9 9 0 0 1-9 9c-4.97 0-9-4.03-9-9s4.03-9 9-9c2.39 0 4.68.94 6.36 2.64L21 8" />
+                <polyline points="21 3 21 8 16 8" />
+              </svg>
+              {refreshing ? "Refreshing" : "Refresh"}
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-5xl px-5 sm:px-8 py-6 sm:py-10 space-y-8">
         <section>
-          <label
-            htmlFor="file-input"
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-            className={`relative block rounded-xl border-2 border-dashed px-5 py-10 sm:py-14 text-center cursor-pointer transition-colors ${
-              dragOver
-                ? "border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)]"
-                : "border-[color:var(--color-line)] bg-[color:var(--color-surface)] hover:border-[color:var(--color-accent)]"
-            }`}
-          >
-            <input
-              ref={inputRef}
-              id="file-input"
-              type="file"
-              accept=".md,.markdown,.html,.htm,.pdf,text/markdown,text/html,application/pdf"
-              multiple
-              className="sr-only"
-              onChange={(e) => {
-                if (e.target.files?.length) void upload(e.target.files);
-                e.target.value = "";
-              }}
-            />
-            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="m5 12 7-7 7 7" /></svg>
-            </div>
-            <div className="mt-3 text-sm font-medium">
-              Drop files here, or <span className="text-[color:var(--color-accent)] underline">browse</span>
-            </div>
-            <div className="mt-1 text-[12px] text-[color:var(--color-dim)]">
-              .md · .markdown · .html · .htm · .pdf — up to 50 MB each
-            </div>
-
-            {status.type === "uploading" && (
-              <div className="mt-4 text-[12px] text-[color:var(--color-dim)]">
-                Uploading <span className="font-medium text-[color:var(--color-ink)]">{status.name}</span>…
-              </div>
-            )}
-            {status.type === "error" && (
-              <div className="mt-4 inline-block text-[12px] px-3 py-1.5 rounded bg-red-50 text-red-700 border border-red-200">
-                {status.message}
-              </div>
-            )}
-          </label>
-        </section>
-
-        <section>
           <div className="flex items-center justify-between gap-3 mb-4">
-            <h2 className="font-serif text-lg sm:text-xl">Your notes</h2>
+            <h2 className="font-serif text-lg sm:text-xl">Craps</h2>
             <span className="text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)]">
               {notes.length} {notes.length === 1 ? "file" : "files"}
             </span>
@@ -196,7 +162,7 @@ export function HomeClient({ initialNotes, storageMode }: HomeClientProps) {
           {visibleNotes.length === 0 ? (
             <div className="rounded-xl border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-6 py-10 text-center text-sm text-[color:var(--color-dim)]">
               {notes.length === 0
-                ? "No notes yet. Upload your first file above."
+                ? "No notes yet."
                 : "No notes match your filters."}
             </div>
           ) : (
@@ -251,13 +217,6 @@ export function HomeClient({ initialNotes, storageMode }: HomeClientProps) {
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
                       Download
                     </a>
-                    <button
-                      onClick={() => handleDelete(note.id)}
-                      className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded border border-transparent text-[color:var(--color-muted)] hover:text-red-600 hover:border-red-200 hover:bg-red-50"
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                      Delete
-                    </button>
                   </div>
                 </li>
               ))}
