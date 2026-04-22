@@ -1,14 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getNote, readNoteContent } from "@/lib/storage";
-import { mimeForKind } from "@/lib/types";
+import { contentDispositionHeader, mimeForKind } from "@/lib/types";
+import { consumeRate, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const RAW_LIMIT = 60;
+const RAW_WINDOW_MS = 60_000;
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const ip = clientIp(req);
+  const gate = consumeRate(`raw:${ip}`, RAW_LIMIT, RAW_WINDOW_MS);
+  if (!gate.ok) {
+    return NextResponse.json(
+      { error: "Too many requests." },
+      { status: 429, headers: { "Retry-After": String(gate.retryAfterSec) } },
+    );
+  }
+
   const { id } = await params;
   const note = await getNote(id);
   if (!note) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -22,13 +35,8 @@ export async function GET(
     "Content-Type": mime,
     "Content-Length": String(data.byteLength),
     "Cache-Control": "private, max-age=0, must-revalidate",
+    "Content-Disposition": contentDispositionHeader(note.originalName, download),
   });
-  if (download) {
-    const safe = note.originalName.replace(/"/g, "");
-    headers.set("Content-Disposition", `attachment; filename="${safe}"`);
-  } else {
-    headers.set("Content-Disposition", "inline");
-  }
 
   return new NextResponse(new Uint8Array(data), { status: 200, headers });
 }

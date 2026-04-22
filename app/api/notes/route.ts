@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createNote, listNotes } from "@/lib/storage";
-import { MAX_UPLOAD_BYTES } from "@/lib/types";
+import { MAX_UPLOAD_BYTES, sanitizeFilename } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const note = await createNote({
-      originalName: file.name,
+      originalName: sanitizeFilename(file.name),
       mimeType: file.type,
       title,
       data: buffer,
