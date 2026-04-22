@@ -1,1 +1,28 @@
-*.DS_Store
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+
+# build outputs
+/.next/
+/out/
+/build
+*.tsbuildinfo
+next-env.d.ts
+
+# app data (uploaded files + metadata)
+/data
+/Examples
+
+# misc
+.DS_Store
+*.pem
+.env*.local
+.vercel
+.claude
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

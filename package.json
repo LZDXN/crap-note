@@ -1,0 +1,35 @@
+{
+  "name": "publish-claude-note",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Publish and share notes generated from Claude conversations — Markdown, HTML, and PDF.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.3.3",
+    "dompurify": "^3.2.4",
+    "jsdom": "^26.0.0",
+    "marked": "^15.0.6",
+    "nanoid": "^5.0.9",
+    "next": "^15.5.15",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}

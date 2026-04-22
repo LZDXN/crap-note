@@ -1,0 +1,59 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createNote, listNotes } from "@/lib/storage";
+import { MAX_UPLOAD_BYTES } from "@/lib/types";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  const notes = await listNotes();
+  return NextResponse.json({ notes });
+}
+
+export async function POST(req: NextRequest) {
+  const contentType = req.headers.get("content-type") || "";
+  if (!contentType.includes("multipart/form-data")) {
+    return NextResponse.json(
+      { error: "Expected multipart/form-data upload." },
+      { status: 400 },
+    );
+  }
+
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch {
+    return NextResponse.json({ error: "Malformed form data." }, { status: 400 });
+  }
+
+  const file = form.get("file");
+  const title = (form.get("title") as string | null) ?? undefined;
+
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: "Missing 'file' field." }, { status: 400 });
+  }
+  if (file.size === 0) {
+    return NextResponse.json({ error: "Uploaded file is empty." }, { status: 400 });
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: `File exceeds the ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB limit.` },
+      { status: 413 },
+    );
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  try {
+    const note = await createNote({
+      originalName: file.name,
+      mimeType: file.type,
+      title,
+      data: buffer,
+    });
+    return NextResponse.json({ note }, { status: 201 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Upload failed.";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
+}
