@@ -1,30 +1,31 @@
-# Publish Claude Note
+# crap-note
 
-A self-hosted web app for **publishing and sharing notes generated from your Claude conversations**. Drop a Markdown, HTML, or PDF file in, get a clean shareable link out.
+A tiny self-hosted web app for **publishing and sharing notes generated from your Claude conversations**. You (the admin) drop a Markdown, HTML, or PDF file in, and anyone with the link gets a clean, read-only page back.
 
-- **Upload** Markdown (`.md`), HTML (`.html`), and PDF (`.pdf`) files
-- **Browse** all your notes in a searchable, filterable list
-- **Share** each note at a unique URL (`/n/<id>`)
-- **Read online** — rendered Markdown, sandboxed HTML, inline PDF
-- **Download** the original file at any time
-- **Responsive** — built mobile-first, works great on laptops too
-- **Self-hosted** — your files live on your server, not in a third‑party SaaS
+- **Admin-only uploads** behind username + password
+- **Public read-only list** at `/` with search, filter, copy-link, download
+- **Per-note viewer** at `/n/<id>` — rendered Markdown, sandboxed HTML, inline PDF
+- **Duplicate-upload rejection** (SHA-256 content hash)
+- **Upload progress** with abort-on-refresh so half-uploaded files never persist
+- **Pluggable storage** — local filesystem for dev, Vercel Blob (private access) for production
+- **No database, no third-party SaaS** — metadata is a JSON index, files live next to it
 
 ---
 
 ## Table of contents
 
 1. [Tech stack](#tech-stack)
-2. [Quickstart (local dev)](#quickstart-local-dev)
-3. [Production build](#production-build)
-4. [Project structure](#project-structure)
-5. [Configuration](#configuration)
-6. [Data storage](#data-storage)
-7. [HTTP API](#http-api)
-8. [Deployment](#deployment)
-9. [Security notes](#security-notes)
-10. [Roadmap](#roadmap)
-11. [Contributing](#contributing)
+2. [Quickstart](#quickstart)
+3. [Admin auth](#admin-auth)
+4. [Production build](#production-build)
+5. [Project structure](#project-structure)
+6. [Configuration](#configuration)
+7. [Data storage](#data-storage)
+8. [HTTP API](#http-api)
+9. [Deployment](#deployment)
+10. [Security notes](#security-notes)
+11. [Roadmap](#roadmap)
+12. [License](#license)
 
 ---
 
@@ -34,37 +35,61 @@ A self-hosted web app for **publishing and sharing notes generated from your Cla
 |-------|--------|-----|
 | Framework | **Next.js 15** (App Router, TypeScript) | Single codebase for server + client; file-based routing gives free shareable URLs |
 | Styling | **Tailwind CSS v4** | Mobile-first, tiny config, consistent design |
-| Markdown | `marked` + `isomorphic-dompurify` (`jsdom`) | Server-rendered MD, safely sanitized |
-| IDs | `nanoid` | Short, URL-safe, unguessable |
-| Storage | Pluggable — **local filesystem** (default) or **Vercel Blob** | Zero-setup for dev; durable object storage in production |
-| PDFs | Native browser `<object>` viewer | No bundled PDF.js to ship — faster loads |
+| Markdown | `marked` + `DOMPurify` (`jsdom`) | Server-rendered MD, sanitized |
+| IDs | `nanoid` (10 chars) | Short, URL-safe, unguessable |
+| Auth | HMAC-signed cookie (SHA-256), stateless | Zero infra, single-admin |
+| Storage | **Local filesystem** or **Vercel Blob** (private) | Zero-setup dev; durable object storage in prod |
+| PDFs | Native browser `<object>` viewer | No bundled PDF.js |
 
-> There is **no database**. Metadata lives in a single JSON index (either `data/notes.json` on disk or `notes/index.json` in Blob). The backend is selected automatically — if `BLOB_READ_WRITE_TOKEN` is set in the environment, Vercel Blob is used; otherwise the filesystem is used.
+> **No database.** Metadata lives in a single JSON index (`data/notes.json` on disk, or `notes/index.json` in Blob). The backend is selected automatically — if `BLOB_READ_WRITE_TOKEN` is set, Vercel Blob is used; otherwise the filesystem.
 
 ---
 
-## Quickstart (local dev)
+## Quickstart
 
-**Requirements**
-
-- Node.js `>= 18.18` (Node 20 or 22 LTS recommended)
-- npm (or pnpm / yarn — pick your favorite)
-
-**Run it**
+**Requirements**: Node.js `>= 18.18` (Node 20 or 22 LTS recommended).
 
 ```bash
-git clone <your fork of this repo>
-cd publish-claude-note
+git clone <your fork>
+cd crap-note
 
 npm install --legacy-peer-deps   # React 19 peer-dep hint; see note below
+cp .env.local.example .env.local # or create one yourself — see "Admin auth"
 npm run dev
-
 # open http://localhost:3000
 ```
 
 The first upload creates `data/` automatically. That folder is git-ignored.
 
-> **About `--legacy-peer-deps`** — React 19 is still newer than some peer-dep ranges in the wild. The flag silences harmless warnings during install. You can drop it once every transitive peer catches up.
+> **About `--legacy-peer-deps`** — React 19 is newer than some peer-dep ranges in the wild. The flag silences harmless warnings during install.
+
+---
+
+## Admin auth
+
+Only the admin can upload, delete, or rename notes. Everyone else sees a read-only list and individual note pages.
+
+Set three env vars in `.env.local`:
+
+```bash
+ADMIN_USERNAME="LZDXN"
+ADMIN_PASSWORD="<paste a long random string>"
+ADMIN_SESSION_SECRET="<paste a different long random string>"
+```
+
+Generate both random values with:
+
+```bash
+node -e "const c=require('node:crypto');console.log('PASSWORD='+c.randomBytes(32).toString('base64url'));console.log('SECRET='+c.randomBytes(48).toString('base64url'));"
+```
+
+Then **restart the dev server** (env changes aren't hot-reloaded) and sign in at [`/admin/login`](http://localhost:3000/admin/login). On success you land at `/admin`, which is the upload + management portal.
+
+**Session cookie**: HMAC-signed (SHA-256) JSON payload, `httpOnly` + `sameSite=lax`, 7-day TTL. Rotating `ADMIN_SESSION_SECRET` or changing `ADMIN_USERNAME` invalidates all existing sessions.
+
+**Login brute-force protection**: 5 attempts per minute per IP.
+
+**Fallback**: if you start the server with none of the admin env vars set, the auth gate is disabled and all routes behave as they did before. Only do this on a machine that nobody else can reach.
 
 ---
 
@@ -72,59 +97,62 @@ The first upload creates `data/` automatically. That folder is git-ignored.
 
 ```bash
 npm run build          # type-checks + builds /.next
-npm run start          # serves the built app on PORT (default 3000)
-
-# or bind a specific port:
-PORT=8080 npm run start
+npm run start          # serves on PORT (default 3000)
 ```
 
-Smoke test:
-
-```bash
-curl -F "file=@./my-note.md" http://localhost:8080/api/notes
-```
+Make sure the three `ADMIN_*` env vars are set for the `start` command too.
 
 ---
 
 ## Project structure
 
 ```
-publish-claude-note/
+crap-note/
 ├── app/
 │   ├── layout.tsx                  # root layout (fonts, <body>)
-│   ├── page.tsx                    # home: upload + file list (server component)
+│   ├── page.tsx                    # home: public read-only list (server component)
+│   ├── error.tsx                   # global error boundary — big "XD"
 │   ├── globals.css                 # Tailwind + design tokens + .prose-note
 │   ├── _components/
-│   │   ├── HomeClient.tsx          # client: uploader, search, filter, cards
+│   │   ├── HomeClient.tsx          # client: list + search + filter + copy/download
 │   │   ├── ViewerActions.tsx       # client: copy-link + download buttons
-│   │   ├── HtmlViewer.tsx          # client: sandboxed iframe + auto-resize
+│   │   ├── HtmlViewer.tsx          # client: sandboxed iframe (no same-origin)
 │   │   ├── PdfViewer.tsx           # client: <object> inline PDF
 │   │   └── KindIcon.tsx            # shared MD/HTML/PDF badge
-│   ├── n/
-│   │   └── [id]/
-│   │       ├── page.tsx            # single-note viewer (server component)
-│   │       └── not-found.tsx       # custom 404
+│   ├── admin/
+│   │   ├── page.tsx                # admin portal (server: requires session)
+│   │   ├── login/page.tsx          # login form (server: redirects if already signed in)
+│   │   └── _components/
+│   │       ├── AdminClient.tsx     # uploader + manage list with delete
+│   │       └── LoginClient.tsx     # username/password form
+│   ├── n/[id]/
+│   │   ├── page.tsx                # single-note viewer (server component)
+│   │   └── not-found.tsx           # custom 404
 │   └── api/
+│       ├── auth/
+│       │   ├── login/route.ts      # POST — set session cookie (rate-limited)
+│       │   ├── logout/route.ts     # POST — clear cookie
+│       │   └── session/route.ts    # GET  — { authenticated, configured }
 │       └── notes/
-│           ├── route.ts            # GET list · POST upload
+│           ├── route.ts            # GET list · POST upload (admin only)
 │           └── [id]/
-│               ├── route.ts        # GET meta · PATCH title · DELETE
-│               └── raw/route.ts    # inline/attachment download of the file bytes
+│               ├── route.ts        # GET meta · PATCH title · DELETE (admin only)
+│               └── raw/route.ts    # streamed file bytes (rate-limited)
 ├── lib/
+│   ├── session.ts                  # HMAC cookie sign/verify, credential check
+│   ├── rate-limit.ts               # in-memory per-IP fixed-window limiter
 │   ├── storage/
-│   │   ├── index.ts                # picks backend based on BLOB_READ_WRITE_TOKEN
-│   │   ├── fs.ts                   # filesystem backend (data/ folder)
-│   │   └── blob.ts                 # Vercel Blob backend
+│   │   ├── index.ts                # picks backend from BLOB_READ_WRITE_TOKEN
+│   │   ├── fs.ts                   # filesystem backend
+│   │   └── blob.ts                 # Vercel Blob backend (private access)
 │   ├── render.ts                   # marked + DOMPurify sanitizer
 │   ├── format.ts                   # bytes, relative time, labels
-│   └── types.ts                    # NoteRecord, kind detection, MIME map
+│   └── types.ts                    # NoteRecord, sanitizeFilename, content-disposition
 ├── data/                           # ← created at runtime, git-ignored
 │   ├── notes.json
-│   └── files/
-│       └── <id>.<ext>
-├── Examples/                       # sample uploads (ignored by the app)
+│   └── files/<id>.<ext>
+├── examples/                       # sample uploads (ignored by the app)
 ├── next.config.ts
-├── tailwind.config (via globals.css @theme)
 ├── tsconfig.json
 ├── postcss.config.mjs
 └── package.json
@@ -134,21 +162,22 @@ publish-claude-note/
 
 ## Configuration
 
-The app runs with zero required configuration. Optional environment variables:
+| Variable | Required? | Purpose |
+|----------|-----------|---------|
+| `ADMIN_USERNAME` | Yes (for auth) | Admin login name |
+| `ADMIN_PASSWORD` | Yes (for auth) | Admin password — plaintext, compare is constant-time |
+| `ADMIN_SESSION_SECRET` | Yes (for auth) | HMAC key for session cookies |
+| `BLOB_READ_WRITE_TOKEN` | Only for Blob backend | Switches storage to Vercel Blob (private access) |
+| `PORT` | No (default `3000`) | Port for `next start` |
+| `HOSTNAME` | No (default `0.0.0.0`) | Bind address for `next start` |
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `PORT` | `3000` | Port for `next start` |
-| `HOSTNAME` | `0.0.0.0` | Bind address for `next start` |
-| `BLOB_READ_WRITE_TOKEN` | *(unset)* | **Switches storage to Vercel Blob.** When unset, the filesystem backend is used. |
-
-Upload size limit is `50 MB`. Change it in `lib/types.ts` (`MAX_UPLOAD_BYTES`) **and** in `next.config.ts` (`serverActions.bodySizeLimit`).
+Upload size limit is `50 MB`. Change it in [`lib/types.ts`](lib/types.ts) (`MAX_UPLOAD_BYTES`) **and** [`next.config.ts`](next.config.ts) (`serverActions.bodySizeLimit`).
 
 ---
 
 ## Data storage
 
-The storage backend is chosen automatically based on the environment. A small badge in the home-page header shows which backend is active (`Local FS` or `Vercel Blob`).
+The storage backend is chosen automatically. A small badge in the home-page refresh-button tooltip shows which is active (`Local FS` or `Vercel Blob`).
 
 ### Filesystem backend (default)
 
@@ -156,40 +185,32 @@ Everything lives under `./data`:
 
 ```
 data/
-├── notes.json           # the metadata index (sortable/editable by hand)
+├── notes.json           # the metadata index (editable by hand)
 └── files/
     ├── AbCd1234eF.md
     ├── GhIj5678kL.html
     └── MnOp9012qR.pdf
 ```
 
-- **Back up**: copy the whole `data/` folder.
-- **Migrate**: drop that folder onto the new server and restart.
+Back up: copy the `data/` folder. Migrate: drop it onto the new server and restart.
 
 ### Vercel Blob backend
 
 Activated by setting `BLOB_READ_WRITE_TOKEN`. When active:
 
 - File contents live in Blob at `notes/files/<id>.<ext>` (random suffix added by Vercel).
-- The metadata index lives at `notes/index.json` in Blob.
-- The store is configured with **private access** — every read (inline or download) is streamed through `/api/notes/:id/raw`, never served directly from a public CDN URL. This keeps the door open to add per-note authentication later without re-uploading anything.
+- The metadata index lives at `notes/index.json`.
+- The store is configured with **private access**. Every read (inline or download) is streamed through `/api/notes/:id/raw` — nothing is served from a public CDN URL. This keeps the door open to per-note ACLs later without reuploading.
 
-#### Set up Vercel Blob
+**Set up**: in the Vercel dashboard, **Storage → Create Database → Blob**, connect it to your project, then pull env vars locally:
 
-1. In the Vercel dashboard: **Storage → Create Database → Blob**.
-2. Connect the store to your project; Vercel injects `BLOB_READ_WRITE_TOKEN` automatically in production.
-3. For local development, pull the env var down:
+```bash
+npx vercel env pull .env.local
+```
 
-   ```bash
-   npx vercel env pull .env.local
-   # or paste BLOB_READ_WRITE_TOKEN=vercel_blob_rw_... into .env.local yourself
-   ```
+> **Mixing backends**: a note only exists in the backend that stored it. Switching env vars doesn't migrate data — old notes just stop appearing in the UI until you switch back. To actually move notes, re-upload them while the target backend is active.
 
-4. Restart `npm run dev`. The badge in the header should flip from `Local FS` to `Vercel Blob`.
-
-> **Mixing backends**: a note created under one backend lives *only* in that backend. If you switch, the old notes disappear from the UI until you switch back (they aren't deleted). To migrate existing FS notes into Blob, upload them again while Blob is active.
-
-### Metadata shape (both backends)
+### Metadata shape
 
 ```json
 {
@@ -203,46 +224,32 @@ Activated by setting `BLOB_READ_WRITE_TOKEN`. When active:
   "size": 18150,
   "createdAt": "2026-04-21T12:34:56.000Z",
   "updatedAt": "2026-04-21T12:34:56.000Z",
-  "blobUrl": "https://...public.blob.vercel-storage.com/...",
+  "contentHash": "…sha256 hex…",
+  "blobUrl": "https://....blob.vercel-storage.com/...",
   "blobPathname": "notes/files/AbCd1234eF-abc123.md"
 }
 ```
 
-`blobUrl` and `blobPathname` are present only for notes stored in Blob.
+`blobUrl` / `blobPathname` are present only for Blob-stored notes. `contentHash` is present for any note uploaded since dedup was added.
 
 ---
 
 ## HTTP API
 
-All endpoints return JSON (except `/raw`, which streams the file).
-
-| Method | Path | Body | Returns |
+| Method | Path | Auth | Returns |
 |--------|------|------|---------|
-| `GET`  | `/api/notes` | — | `{ notes: NoteRecord[] }` (newest first) |
-| `POST` | `/api/notes` | `multipart/form-data` with `file` (and optional `title`) | `{ note: NoteRecord }` · `201` |
-| `GET`  | `/api/notes/:id` | — | `{ note: NoteRecord }` |
-| `PATCH`| `/api/notes/:id` | `{ "title": "New title" }` | `{ note: NoteRecord }` |
-| `DELETE`| `/api/notes/:id` | — | `{ ok: true }` |
-| `GET`  | `/api/notes/:id/raw` | — | file bytes, `Content-Disposition: inline` |
-| `GET`  | `/api/notes/:id/raw?download=1` | — | file bytes, `Content-Disposition: attachment` |
+| `GET`  | `/api/notes` | Public | `{ notes: NoteRecord[] }` (newest first) |
+| `POST` | `/api/notes` | **Admin** | `{ note }` · `201` — rejects duplicates with `409` + reference to the existing note |
+| `GET`  | `/api/notes/:id` | Public | `{ note }` |
+| `PATCH`| `/api/notes/:id` | **Admin** | `{ note }` — body: `{ "title": "…" }` |
+| `DELETE`| `/api/notes/:id` | **Admin** | `{ ok: true }` |
+| `GET`  | `/api/notes/:id/raw` | Public (rate-limited 60/min/IP) | file bytes, `Content-Disposition: inline` |
+| `GET`  | `/api/notes/:id/raw?download=1` | Public (rate-limited) | file bytes, `attachment` |
+| `POST` | `/api/auth/login` | Public (rate-limited 5/min/IP) | `{ ok: true }` — body: `{ username, password }` |
+| `POST` | `/api/auth/logout` | Public | `{ ok: true }` — clears cookie |
+| `GET`  | `/api/auth/session` | Public | `{ authenticated, configured }` |
 
-Examples:
-
-```bash
-# upload
-curl -F "file=@./notes.md" http://localhost:3000/api/notes
-
-# list
-curl http://localhost:3000/api/notes | jq
-
-# rename
-curl -X PATCH -H 'content-type: application/json' \
-  -d '{"title":"Econ 101 - midterm prep"}' \
-  http://localhost:3000/api/notes/AbCd1234eF
-
-# delete
-curl -X DELETE http://localhost:3000/api/notes/AbCd1234eF
-```
+Admin endpoints respond `401` when no session cookie is present (or an invalid one). Upload rejects non-multipart bodies with `400`, files over `MAX_UPLOAD_BYTES` with `413`, and unsupported types with `400`.
 
 Shareable viewer URL: `https://<your-host>/n/<id>`.
 
@@ -250,19 +257,26 @@ Shareable viewer URL: `https://<your-host>/n/<id>`.
 
 ## Deployment
 
-### Option A — any Node host (simplest)
+### Vercel (recommended)
+
+1. Push to GitHub, import to Vercel.
+2. **Storage → Create Database → Blob → Connect**. `BLOB_READ_WRITE_TOKEN` is injected for all deployments.
+3. Under **Settings → Environment Variables**, add `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`.
+4. Redeploy.
+
+Vercel's function filesystem is read-only at runtime, so the FS backend doesn't work there. Blob is the only path.
+
+### Any Node host
 
 ```bash
 npm ci --legacy-peer-deps
 npm run build
-PORT=8080 npm run start
+ADMIN_USERNAME=… ADMIN_PASSWORD=… ADMIN_SESSION_SECRET=… PORT=8080 npm run start
 ```
 
-Put nginx / Caddy / Cloudflare in front for HTTPS. Make sure the process has write access to a persistent `data/` directory.
+Put nginx / Caddy / Cloudflare in front for HTTPS. Make sure the process has write access to a persistent `data/` directory if you're on the FS backend.
 
-### Option B — Docker
-
-Create a `Dockerfile`:
+### Docker
 
 ```dockerfile
 FROM node:22-alpine AS builder
@@ -285,90 +299,47 @@ CMD ["npm","run","start"]
 ```
 
 ```bash
-docker build -t publish-claude-note .
-docker run -d -p 3000:3000 -v $PWD/data:/app/data publish-claude-note
-```
-
-### Option C — Vercel (recommended for a shareable public instance)
-
-Vercel's function filesystem is read-only at runtime, so the filesystem backend doesn't work there. Use the Vercel Blob backend instead:
-
-1. Push the repo to GitHub and import it into Vercel.
-2. In the project, open **Storage → Create Database → Blob → Connect**. Vercel sets `BLOB_READ_WRITE_TOKEN` automatically for all deployments (Preview + Production).
-3. Redeploy. That's it — uploads now land in Blob and viewer links stream bytes through your serverless function.
-
-No other code changes needed; the app detects the env var and switches backends at boot.
-
-### Option D — systemd (VPS)
-
-`/etc/systemd/system/publish-claude-note.service`
-
-```ini
-[Unit]
-Description=Publish Claude Note
-After=network.target
-
-[Service]
-Type=simple
-User=www-data
-WorkingDirectory=/opt/publish-claude-note
-Environment=NODE_ENV=production
-Environment=PORT=3000
-ExecStart=/usr/bin/npm run start
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now publish-claude-note
+docker build -t crap-note .
+docker run -d -p 3000:3000 \
+  -e ADMIN_USERNAME=… -e ADMIN_PASSWORD=… -e ADMIN_SESSION_SECRET=… \
+  -v $PWD/data:/app/data crap-note
 ```
 
 ---
 
 ## Security notes
 
-The app is **public by default** — anyone with the URL can view and upload. Design choices that matter:
+- **IDs are 10-char nanoids** (~63 bits of entropy). Links are unguessable but not cryptographically secret — treat them like "unlisted YouTube" URLs.
+- **Markdown** is rendered server-side through `marked`, then `DOMPurify` strips scripts, inline event handlers, and `javascript:` URLs.
+- **HTML** files render inside a sandboxed `<iframe>` with `sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"` — **no `allow-same-origin`**. Uploaded HTML runs in a null origin, so it cannot read the parent DOM, admin cookies, or call credentialed APIs. Trade-off: the iframe can't report its content height cross-origin, so it takes the full viewport and scrolls internally.
+- **PDFs** serve with `Content-Disposition: inline` and the browser's native viewer renders them — no JS in our page.
+- **Filenames** are sanitized before persisting (CR/LF/control chars stripped, path separators and leading dots replaced) to defend against HTTP response-splitting and traversal attempts at the boundary.
+- **`Content-Disposition`** is RFC 6266 compliant: ASCII fallback + `filename*=UTF-8''…` for non-ASCII names.
+- **Dedup**: SHA-256 of the upload bytes is compared against existing notes' `contentHash`. Duplicates return `409` with a pointer to the original.
+- **Rate limits**: login `5/min/IP`, raw file reads `60/min/IP`. In-memory per-process — behind a load balancer, limits are per-instance.
+- **Admin password** is stored plaintext in env. Comparison is constant-time. For a single-admin self-host this is fine; rotate the secret and password if you ever suspect exposure.
 
-- **IDs are 10-char nanoids** (URL-safe, ~63 bits of entropy). Links are unguessable but not cryptographically secret — treat them like "unlisted YouTube" URLs, not passwords.
-- **Markdown is rendered server-side** through `marked` and then passed through `DOMPurify` (with `jsdom`). Script tags, inline event handlers, and `javascript:` URLs are stripped.
-- **HTML files are rendered inside a sandboxed `<iframe>`** (`allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-scripts`). They execute, but they cannot reach the top frame's DOM or cookies from a different origin. If you host untrusted HTML, consider serving `/api/notes/:id/raw` from a **separate origin** (e.g. `files.your-domain.com`) so the sandbox is a true cross-origin boundary.
-- **PDFs are served with `Content-Disposition: inline`** and the browser's own viewer renders them — no JS parsing in our page.
-- **Uploads are capped at 50 MB** per file and the file extension / MIME type is validated.
+**Hardening ideas** if you deploy to a hostile network:
 
-**Before deploying publicly**, seriously consider adding:
-
-1. Authentication (put it behind your SSO or a basic-auth reverse proxy)
-2. Rate-limiting on `POST /api/notes`
-3. A separate origin for `/api/notes/:id/raw` to harden the HTML iframe
+- Serve `/api/notes/:id/raw` from a **separate origin** (e.g. `raw.your-domain.com`) so HTML notes are truly cross-origin even if someone flips `allow-same-origin` back on.
+- Put the app behind your SSO / OAuth reverse proxy instead of the built-in password.
+- Store the admin password as a bcrypt/argon2 hash instead of plaintext.
 
 ---
 
 ## Roadmap
 
-- [ ] Optional auth (single-user password, or OIDC)
 - [ ] Syntax highlighting in Markdown (shiki)
 - [ ] Tags / collections
 - [ ] Server-rendered PDF thumbnails
-- [ ] S3 / R2 storage adapter (drop-in replacement in `lib/storage/`)
+- [ ] S3 / R2 storage adapter
 - [ ] Paste-in Markdown (skip the upload step)
 - [ ] `.docx` and `.txt` support
-
----
-
-## Contributing
-
-1. Fork & clone
-2. `npm install --legacy-peer-deps`
-3. `npm run dev`
-4. Make a branch, open a PR. New viewers should live in `app/_components/*Viewer.tsx` and be wired into `app/n/[id]/page.tsx`.
-
-Bug reports and PRs welcome.
+- [ ] OIDC / SSO replacement for the built-in password
+- [ ] Per-note private links (ACLs on top of the existing private-access storage)
 
 ---
 
 ## License
 
-MIT — do whatever you want, just don't blame us if something breaks. See `LICENSE` if present, otherwise the repository default.
+MIT — do whatever you want, just don't blame anyone if something breaks.

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
+import "katex/dist/katex.min.css";
 import { getNote, readNoteContent } from "@/lib/storage";
 import { renderMarkdown } from "@/lib/render";
 import { formatBytes, formatRelative, kindLabel } from "@/lib/format";
