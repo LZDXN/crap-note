@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteNote, getNote, updateNoteTitle } from "@/lib/storage";
+import { deleteNote, getNote, updateNoteTitle, updateNoteVisibility } from "@/lib/storage";
+import { effectiveVisibility } from "@/lib/types";
 import { isAuthedRequest, isConfigured } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -14,12 +15,20 @@ function requireAdmin(req: NextRequest): NextResponse | null {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const note = await getNote(id);
   if (!note) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Hide private notes from non-admins. 404, not 403 — don't leak existence.
+  if (
+    effectiveVisibility(note) === "private" &&
+    isConfigured() &&
+    !isAuthedRequest(req)
+  ) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   return NextResponse.json({ note });
 }
 
@@ -30,14 +39,30 @@ export async function PATCH(
   const denied = requireAdmin(req);
   if (denied) return denied;
   const { id } = await params;
-  let body: { title?: string };
+  let body: { title?: string; visibility?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
+
+  if (typeof body.visibility === "string") {
+    if (body.visibility !== "public" && body.visibility !== "private") {
+      return NextResponse.json(
+        { error: "visibility must be 'public' or 'private'." },
+        { status: 400 },
+      );
+    }
+    const note = await updateNoteVisibility(id, body.visibility);
+    if (!note) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ note });
+  }
+
   if (typeof body.title !== "string") {
-    return NextResponse.json({ error: "title is required." }, { status: 400 });
+    return NextResponse.json(
+      { error: "title or visibility is required." },
+      { status: 400 },
+    );
   }
   const note = await updateNoteTitle(id, body.title);
   if (!note) return NextResponse.json({ error: "Not found" }, { status: 404 });

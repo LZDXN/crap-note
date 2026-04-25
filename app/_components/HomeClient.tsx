@@ -84,9 +84,29 @@ export function HomeClient({ initialNotes, storageMode, initialAuth }: HomeClien
             {auth.configured && (
               <Link
                 href={auth.authenticated ? "/admin" : "/admin/login"}
-                className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] border border-[color:var(--color-line)] rounded-lg px-3 py-1.5 transition-colors"
+                aria-label={auth.authenticated ? "Admin" : "Sign in"}
+                title={auth.authenticated ? "Admin" : "Sign in"}
+                className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] border border-[color:var(--color-line)] rounded-lg px-2 py-1.5 sm:px-3 transition-colors"
               >
-                {auth.authenticated ? "Admin" : "Sign in"}
+                {auth.authenticated ? (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:hidden">
+                    <line x1="8" x2="21" y1="6" y2="6" />
+                    <line x1="8" x2="21" y1="12" y2="12" />
+                    <line x1="8" x2="21" y1="18" y2="18" />
+                    <line x1="3" x2="3.01" y1="6" y2="6" />
+                    <line x1="3" x2="3.01" y1="12" y2="12" />
+                    <line x1="3" x2="3.01" y1="18" y2="18" />
+                  </svg>
+                ) : (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:hidden">
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                    <polyline points="10 17 15 12 10 7" />
+                    <line x1="15" x2="3" y1="12" y2="12" />
+                  </svg>
+                )}
+                <span className="hidden sm:inline">
+                  {auth.authenticated ? "Admin" : "Sign in"}
+                </span>
               </Link>
             )}
             <button
@@ -94,7 +114,7 @@ export function HomeClient({ initialNotes, storageMode, initialAuth }: HomeClien
               disabled={refreshing}
               aria-label="Refresh notes"
               title={`Storage: ${storageMode === "blob" ? "Vercel Blob" : "Local FS"}`}
-              className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] border border-[color:var(--color-line)] rounded-lg px-3 py-1.5 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] border border-[color:var(--color-line)] rounded-lg px-2 py-1.5 sm:px-3 disabled:opacity-50 transition-colors"
             >
               <svg
                 className={refreshing ? "animate-spin" : ""}
@@ -110,7 +130,9 @@ export function HomeClient({ initialNotes, storageMode, initialAuth }: HomeClien
                 <path d="M21 12a9 9 0 0 1-9 9c-4.97 0-9-4.03-9-9s4.03-9 9-9c2.39 0 4.68.94 6.36 2.64L21 8" />
                 <polyline points="21 3 21 8 16 8" />
               </svg>
-              {refreshing ? "Refreshing" : "Refresh"}
+              <span className="hidden sm:inline">
+                {refreshing ? "Refreshing" : "Refresh"}
+              </span>
             </button>
           </div>
         </div>

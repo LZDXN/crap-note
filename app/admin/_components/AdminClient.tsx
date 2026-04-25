@@ -9,7 +9,8 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { NoteRecord } from "@/lib/types";
+import type { NoteRecord, NoteVisibility } from "@/lib/types";
+import { effectiveVisibility } from "@/lib/types";
 import { formatBytes, formatRelative, kindLabel } from "@/lib/format";
 import { KindIcon } from "@/app/_components/KindIcon";
 
@@ -140,6 +141,29 @@ export function AdminClient({ initialNotes, username }: AdminClientProps) {
     if (res.ok) setNotes((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
+  const handleToggleVisibility = useCallback(
+    async (id: string, next: NoteVisibility) => {
+      // Publishing exposes the note to anyone with the link, so confirm.
+      // Unpublishing back to private is non-destructive — no prompt.
+      if (
+        next === "public" &&
+        !confirm("Are you sure you want to publish the note? Anyone with the link will be able to view it.")
+      ) {
+        return;
+      }
+      const res = await fetch(`/api/notes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visibility: next }),
+      });
+      if (res.ok) {
+        const { note } = (await res.json()) as { note: NoteRecord };
+        setNotes((prev) => prev.map((n) => (n.id === id ? note : n)));
+      }
+    },
+    [],
+  );
+
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/admin/login");
@@ -154,21 +178,48 @@ export function AdminClient({ initialNotes, username }: AdminClientProps) {
             <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--color-accent)]">
               Admin
             </div>
-            <h1 className="font-serif text-2xl sm:text-[28px] leading-tight mt-1">
-              Upload & manage
+            <h1 className="font-serif text-2xl sm:text-[28px] leading-tight mt-1 text-[color:var(--color-accent)]">
+              Craps
             </h1>
             {username && (
-              <div className="mt-1 text-[11px] text-[color:var(--color-muted)]">
-                Signed in as <span className="font-medium">{username}</span>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[color:var(--color-muted)]">
+                <span>
+                  Signed in as <span className="font-medium">{username}</span>
+                </span>
+                <button
+                  onClick={logout}
+                  aria-label="Sign out"
+                  title="Sign out"
+                  className="sm:hidden inline-flex items-center gap-1 uppercase tracking-[0.1em] hover:text-[color:var(--color-ink)]"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" x2="9" y1="12" y2="12" />
+                  </svg>
+                </button>
               </div>
             )}
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href="/"
+              aria-label="View site"
+              title="View site"
+              className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] px-2 py-1.5"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <span className="hidden sm:inline">View site</span>
+            </Link>
             <button
               onClick={refresh}
               disabled={refreshing}
               aria-label="Refresh notes"
-              className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] border border-[color:var(--color-line)] rounded-lg px-3 py-1.5 disabled:opacity-50 transition-colors"
+              title="Refresh notes"
+              className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] border border-[color:var(--color-line)] rounded-lg px-2 py-1.5 sm:px-3 disabled:opacity-50 transition-colors"
             >
               <svg
                 className={refreshing ? "animate-spin" : ""}
@@ -177,17 +228,11 @@ export function AdminClient({ initialNotes, username }: AdminClientProps) {
                 <path d="M21 12a9 9 0 0 1-9 9c-4.97 0-9-4.03-9-9s4.03-9 9-9c2.39 0 4.68.94 6.36 2.64L21 8" />
                 <polyline points="21 3 21 8 16 8" />
               </svg>
-              {refreshing ? "Refreshing" : "Refresh"}
+              <span className="hidden sm:inline">{refreshing ? "Refreshing" : "Refresh"}</span>
             </button>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] border border-[color:var(--color-line)] rounded-lg px-3 py-1.5"
-            >
-              View site
-            </Link>
             <button
               onClick={logout}
-              className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] border border-[color:var(--color-line)] rounded-lg px-3 py-1.5"
+              className="hidden sm:inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)] border border-[color:var(--color-line)] rounded-lg px-3 py-1.5"
             >
               Sign out
             </button>
@@ -231,6 +276,9 @@ export function AdminClient({ initialNotes, username }: AdminClientProps) {
             </div>
             <div className="mt-1 text-[12px] text-[color:var(--color-dim)]">
               .md · .markdown · .html · .htm · .pdf — up to 50 MB each
+            </div>
+            <div className="mt-1 text-[11px] text-[color:var(--color-muted)]">
+              Uploads are private by default. Use “Publish” to share a link.
             </div>
 
             {status.type === "uploading" && (
@@ -285,7 +333,10 @@ export function AdminClient({ initialNotes, username }: AdminClientProps) {
             </div>
           ) : (
             <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {notes.map((note) => (
+              {notes.map((note) => {
+                const visibility = effectiveVisibility(note);
+                const isPrivate = visibility === "private";
+                return (
                 <li
                   key={note.id}
                   className="group relative rounded-xl border border-[color:var(--color-line)] bg-[color:var(--color-surface)] p-4"
@@ -296,8 +347,27 @@ export function AdminClient({ initialNotes, username }: AdminClientProps) {
                         <KindIcon kind={note.kind} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium text-[15px] leading-snug break-words">
-                          {note.title}
+                        <div className="flex items-start gap-2">
+                          <div
+                            className="font-medium text-[15px] leading-snug flex-1 min-w-0 truncate"
+                            title={note.title}
+                          >
+                            {note.title}
+                          </div>
+                          <span
+                            className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-medium ${
+                              isPrivate
+                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            }`}
+                          >
+                            {isPrivate ? (
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                            ) : (
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /></svg>
+                            )}
+                            {isPrivate ? "Private" : "Public"}
+                          </span>
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[color:var(--color-dim)]">
                           <span className="uppercase tracking-wider font-medium">
@@ -312,6 +382,25 @@ export function AdminClient({ initialNotes, username }: AdminClientProps) {
                     </div>
                   </Link>
                   <div className="mt-3 flex items-center gap-1 text-[11px]">
+                    <button
+                      onClick={() =>
+                        handleToggleVisibility(note.id, isPrivate ? "public" : "private")
+                      }
+                      title={isPrivate ? "Make public — anyone with the link can view" : "Make private — only you can view when signed in"}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded border border-[color:var(--color-line)] text-[color:var(--color-dim)] hover:text-[color:var(--color-ink)] hover:border-[color:var(--color-accent)]"
+                    >
+                      {isPrivate ? (
+                        <>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /></svg>
+                          Publish
+                        </>
+                      ) : (
+                        <>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                          Unpublish
+                        </>
+                      )}
+                    </button>
                     <a
                       href={`/api/notes/${note.id}/raw?download=1`}
                       className="inline-flex items-center gap-1 px-2 py-1 rounded border border-[color:var(--color-line)] text-[color:var(--color-dim)] hover:text-[color:var(--color-ink)] hover:border-[color:var(--color-accent)]"
@@ -328,7 +417,8 @@ export function AdminClient({ initialNotes, username }: AdminClientProps) {
                     </button>
                   </div>
                 </li>
-              ))}
+              );
+              })}
             </ul>
           )}
         </section>

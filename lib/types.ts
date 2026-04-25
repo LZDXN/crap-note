@@ -1,4 +1,5 @@
 export type NoteKind = "markdown" | "html" | "pdf";
+export type NoteVisibility = "public" | "private";
 
 export interface NoteRecord {
   id: string;
@@ -17,6 +18,13 @@ export interface NoteRecord {
   blobUrl?: string;
   /** Set when the note is stored in Vercel Blob. The pathname within the blob store. */
   blobPathname?: string;
+  /** "public" notes are listed on the home page and viewable by anyone with the link. "private" notes are admin-only. Records written before this field existed are treated as "public" so old links keep working. */
+  visibility?: NoteVisibility;
+}
+
+/** Resolve a note's effective visibility, defaulting unset (legacy) records to public. */
+export function effectiveVisibility(note: Pick<NoteRecord, "visibility">): NoteVisibility {
+  return note.visibility ?? "public";
 }
 
 export type StorageMode = "filesystem" | "blob";

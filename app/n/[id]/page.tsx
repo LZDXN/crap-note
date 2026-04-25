@@ -5,6 +5,8 @@ import "katex/dist/katex.min.css";
 import { getNote, readNoteContent } from "@/lib/storage";
 import { renderMarkdown } from "@/lib/render";
 import { formatBytes, formatRelative, kindLabel } from "@/lib/format";
+import { effectiveVisibility } from "@/lib/types";
+import { isAuthed, isConfigured } from "@/lib/session";
 import { KindIcon } from "@/app/_components/KindIcon";
 import { ViewerActions } from "@/app/_components/ViewerActions";
 import { HtmlViewer } from "@/app/_components/HtmlViewer";
@@ -16,10 +18,17 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
+async function visibleToCaller(note: { visibility?: "public" | "private" }) {
+  if (effectiveVisibility(note) === "public") return true;
+  if (!isConfigured()) return true;
+  return isAuthed();
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const note = await getNote(id);
   if (!note) return { title: "Note not found" };
+  if (!(await visibleToCaller(note))) return { title: "Note not found" };
   return {
     title: `${note.title} · Publish Claude Note`,
     description: `Shared ${kindLabel(note.kind)} note`,
@@ -30,6 +39,7 @@ export default async function NotePage({ params }: Props) {
   const { id } = await params;
   const note = await getNote(id);
   if (!note) notFound();
+  if (!(await visibleToCaller(note))) notFound();
 
   let renderedHtml: string | null = null;
   if (note.kind === "markdown") {

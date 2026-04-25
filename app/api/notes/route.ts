@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { createNote, listNotes } from "@/lib/storage";
-import { MAX_UPLOAD_BYTES, sanitizeFilename } from "@/lib/types";
+import { effectiveVisibility, MAX_UPLOAD_BYTES, sanitizeFilename } from "@/lib/types";
 import { isAuthedRequest, isConfigured } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const notes = await listNotes();
-  return NextResponse.json({ notes });
+  const showAll = !isConfigured() || isAuthedRequest(req);
+  const visible = showAll
+    ? notes
+    : notes.filter((n) => effectiveVisibility(n) === "public");
+  return NextResponse.json({ notes: visible });
 }
 
 export async function POST(req: NextRequest) {

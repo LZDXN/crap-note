@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { nanoid } from "nanoid";
-import { kindFromName, mimeForKind, type NoteKind, type NoteRecord } from "../types";
+import { kindFromName, mimeForKind, type NoteKind, type NoteRecord, type NoteVisibility } from "../types";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const FILES_DIR = path.join(DATA_DIR, "files");
@@ -62,6 +62,7 @@ export async function createNote(opts: {
   title?: string;
   data: Buffer;
   contentHash?: string;
+  visibility?: NoteVisibility;
 }): Promise<NoteRecord> {
   const detected = kindFromName(opts.originalName, opts.mimeType);
   if (!detected) {
@@ -93,6 +94,7 @@ export async function createNote(opts: {
     createdAt: now,
     updatedAt: now,
     contentHash: opts.contentHash,
+    visibility: opts.visibility ?? "private",
   };
 
   const notes = await readDb();
@@ -123,6 +125,19 @@ export async function updateNoteTitle(id: string, title: string): Promise<NoteRe
   if (!clean) return note;
   note.title = clean;
   note.slug = slugify(clean);
+  note.updatedAt = new Date().toISOString();
+  await writeDb(notes);
+  return note;
+}
+
+export async function updateNoteVisibility(
+  id: string,
+  visibility: NoteVisibility,
+): Promise<NoteRecord | null> {
+  const notes = await readDb();
+  const note = notes.find((n) => n.id === id);
+  if (!note) return null;
+  note.visibility = visibility;
   note.updatedAt = new Date().toISOString();
   await writeDb(notes);
   return note;

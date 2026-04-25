@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getNote, readNoteContent } from "@/lib/storage";
-import { contentDispositionHeader, mimeForKind } from "@/lib/types";
+import { contentDispositionHeader, effectiveVisibility, mimeForKind } from "@/lib/types";
+import { isAuthedRequest, isConfigured } from "@/lib/session";
 import { consumeRate, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -25,6 +26,13 @@ export async function GET(
   const { id } = await params;
   const note = await getNote(id);
   if (!note) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (
+    effectiveVisibility(note) === "private" &&
+    isConfigured() &&
+    !isAuthedRequest(req)
+  ) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const download = req.nextUrl.searchParams.get("download") === "1";
 

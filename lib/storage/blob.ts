@@ -1,6 +1,6 @@
 import { del, get, put } from "@vercel/blob";
 import { nanoid } from "nanoid";
-import { kindFromName, mimeForKind, type NoteKind, type NoteRecord } from "../types";
+import { kindFromName, mimeForKind, type NoteKind, type NoteRecord, type NoteVisibility } from "../types";
 
 const INDEX_KEY = "notes/index.json";
 
@@ -59,6 +59,7 @@ export async function createNote(opts: {
   title?: string;
   data: Buffer;
   contentHash?: string;
+  visibility?: NoteVisibility;
 }): Promise<NoteRecord> {
   const detected = kindFromName(opts.originalName, opts.mimeType);
   if (!detected) {
@@ -95,6 +96,7 @@ export async function createNote(opts: {
     contentHash: opts.contentHash,
     blobUrl: blob.url,
     blobPathname: blob.pathname,
+    visibility: opts.visibility ?? "private",
   };
 
   const notes = await loadIndex();
@@ -127,6 +129,19 @@ export async function updateNoteTitle(id: string, title: string): Promise<NoteRe
   if (!clean) return note;
   note.title = clean;
   note.slug = slugify(clean);
+  note.updatedAt = new Date().toISOString();
+  await saveIndex(notes);
+  return note;
+}
+
+export async function updateNoteVisibility(
+  id: string,
+  visibility: NoteVisibility,
+): Promise<NoteRecord | null> {
+  const notes = await loadIndex();
+  const note = notes.find((n) => n.id === id);
+  if (!note) return null;
+  note.visibility = visibility;
   note.updatedAt = new Date().toISOString();
   await saveIndex(notes);
   return note;
