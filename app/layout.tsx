@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { Footer } from "./_components/Footer";
 
 export const metadata: Metadata = {
-  title: "Share Claude Note",
+  title: "Pieces of Crap Notes...",
   description: "Publish and share notes, briefs, and study guides generated from Claude conversations.",
 };
 
@@ -28,7 +29,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Footer />
+      </body>
     </html>
   );
 }

@@ -224,12 +224,6 @@ export function HomeClient({ initialNotes, storageMode, initialAuth }: HomeClien
           )}
         </section>
       </main>
-
-      <footer className="border-t border-[color:var(--color-line)] mt-12 py-6">
-        <div className="mx-auto max-w-5xl px-5 sm:px-8 text-[11px] text-[color:var(--color-muted)] flex flex-wrap items-center justify-between gap-2">
-          <span>@LZDXN 2026</span>
-        </div>
-      </footer>
     </div>
   );
 }
