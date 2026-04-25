@@ -3,7 +3,7 @@ import "./globals.css";
 import { Footer } from "./_components/Footer";
 
 export const metadata: Metadata = {
-  title: "Pieces of Crap Notes...",
+  title: "Piece of Craps...",
   description: "Publish and share notes, briefs, and study guides generated from Claude conversations.",
 };
 
