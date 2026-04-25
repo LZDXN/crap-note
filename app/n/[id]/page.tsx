@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!note) return { title: "Note not found" };
   if (!(await visibleToCaller(note))) return { title: "Note not found" };
   return {
-    title: `${note.title} · Publish Claude Note`,
+    title: `${note.title} · Crap Notes`,
     description: `Shared ${kindLabel(note.kind)} note`,
   };
 }

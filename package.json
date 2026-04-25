@@ -1,8 +1,9 @@
 {
-  "name": "publish-claude-note",
+  "name": "crap-notes",
   "version": "0.1.0",
   "private": true,
-  "description": "Publish and share notes generated from Claude conversations — Markdown, HTML, and PDF.",
+  "description": "Crap Notes — a tiny self-hosted app for sharing Markdown, HTML, and PDF notes with private-by-default uploads.",
+  "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

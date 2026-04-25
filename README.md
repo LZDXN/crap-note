@@ -1,10 +1,12 @@
-# crap-note
+# Crap Notes
 
-A tiny self-hosted web app for **publishing and sharing notes generated from your Claude conversations**. You (the admin) drop a Markdown, HTML, or PDF file in, and anyone with the link gets a clean, read-only page back.
+A tiny self-hosted web app for **sharing your notes** — drop a Markdown, HTML, or PDF file in and get a clean, read-only page back. Built originally to publish notes from Claude conversations, but it works for anything you want to read or share.
 
+- **Private by default** — uploads start hidden; one click to publish a shareable link
 - **Admin-only uploads** behind username + password
-- **Public read-only list** at `/` with search, filter, copy-link, download
-- **Per-note viewer** at `/n/<id>` — rendered Markdown, sandboxed HTML, inline PDF
+- **Public list** at `/` shows only published notes; signed-in admin sees everything
+- **Per-note viewer** at `/n/<id>` — rendered Markdown (with KaTeX math), sandboxed HTML, inline PDF
+- **Friendly 404** for deleted, missing, or private notes
 - **Duplicate-upload rejection** (SHA-256 content hash)
 - **Upload progress** with abort-on-refresh so half-uploaded files never persist
 - **Pluggable storage** — local filesystem for dev, Vercel Blob (private access) for production
@@ -51,17 +53,38 @@ A tiny self-hosted web app for **publishing and sharing notes generated from you
 
 ```bash
 git clone <your fork>
-cd crap-note
+cd crap-notess
 
-npm install --legacy-peer-deps   # React 19 peer-dep hint; see note below
-cp .env.local.example .env.local # or create one yourself — see "Admin auth"
+npm install --legacy-peer-deps   # React 19 peer-dep hint — see note below
+```
+
+Create a `.env.local` in the project root with the three admin variables (see [Admin auth](#admin-auth) for how to generate them):
+
+```bash
+ADMIN_USERNAME="<your-username>"
+ADMIN_PASSWORD="<paste a long random string>"
+ADMIN_SESSION_SECRET="<paste a different long random string>"
+```
+
+Then start the dev server:
+
+```bash
 npm run dev
 # open http://localhost:3000
 ```
 
+**First run**
+
+1. Visit [`/admin/login`](http://localhost:3000/admin/login) and sign in with the credentials you just set.
+2. You'll land at `/admin` — drop in a `.md`, `.html`, or `.pdf` file.
+3. New uploads are **private by default**. Click **Publish** on a note to make its `/n/<id>` link publicly viewable.
+4. The home page at `/` shows only published notes to anyone not signed in. Signed-in admin sees all notes with a public/private badge.
+
 The first upload creates `data/` automatically. That folder is git-ignored.
 
 > **About `--legacy-peer-deps`** — React 19 is newer than some peer-dep ranges in the wild. The flag silences harmless warnings during install.
+
+> **No `.env.local`?** The app still runs but auth is disabled and uploads are open to anyone. Only do this on a machine nobody else can reach.
 
 ---
 
@@ -107,7 +130,7 @@ Make sure the three `ADMIN_*` env vars are set for the `start` command too.
 ## Project structure
 
 ```
-crap-note/
+crap-notes/
 ├── app/
 │   ├── layout.tsx                  # root layout (fonts, <body>)
 │   ├── page.tsx                    # home: public read-only list (server component)
@@ -226,11 +249,12 @@ npx vercel env pull .env.local
   "updatedAt": "2026-04-21T12:34:56.000Z",
   "contentHash": "…sha256 hex…",
   "blobUrl": "https://....blob.vercel-storage.com/...",
-  "blobPathname": "notes/files/AbCd1234eF-abc123.md"
+  "blobPathname": "notes/files/AbCd1234eF-abc123.md",
+  "visibility": "private"
 }
 ```
 
-`blobUrl` / `blobPathname` are present only for Blob-stored notes. `contentHash` is present for any note uploaded since dedup was added.
+`blobUrl` / `blobPathname` are present only for Blob-stored notes. `contentHash` is present for any note uploaded since dedup was added. `visibility` is `"public"` or `"private"`; records written before this field existed are treated as `"public"` so old shared links keep working.
 
 ---
 
@@ -238,18 +262,18 @@ npx vercel env pull .env.local
 
 | Method | Path | Auth | Returns |
 |--------|------|------|---------|
-| `GET`  | `/api/notes` | Public | `{ notes: NoteRecord[] }` (newest first) |
-| `POST` | `/api/notes` | **Admin** | `{ note }` · `201` — rejects duplicates with `409` + reference to the existing note |
-| `GET`  | `/api/notes/:id` | Public | `{ note }` |
-| `PATCH`| `/api/notes/:id` | **Admin** | `{ note }` — body: `{ "title": "…" }` |
+| `GET`  | `/api/notes` | Public (filtered) / Admin (all) | `{ notes: NoteRecord[] }` — public callers only see `visibility: "public"` notes |
+| `POST` | `/api/notes` | **Admin** | `{ note }` · `201` — uploads default to `private`; rejects duplicates with `409` + reference to existing note |
+| `GET`  | `/api/notes/:id` | Public for public notes / Admin for private | `{ note }` — private notes return `404` to non-admins (hides existence) |
+| `PATCH`| `/api/notes/:id` | **Admin** | `{ note }` — body: `{ "title": "…" }` or `{ "visibility": "public" \| "private" }` |
 | `DELETE`| `/api/notes/:id` | **Admin** | `{ ok: true }` |
-| `GET`  | `/api/notes/:id/raw` | Public (rate-limited 60/min/IP) | file bytes, `Content-Disposition: inline` |
-| `GET`  | `/api/notes/:id/raw?download=1` | Public (rate-limited) | file bytes, `attachment` |
+| `GET`  | `/api/notes/:id/raw` | Public for public notes (rate-limited 60/min/IP) / Admin for private | file bytes, `Content-Disposition: inline` — `404` for private notes when not signed in |
+| `GET`  | `/api/notes/:id/raw?download=1` | Same as above | file bytes, `attachment` |
 | `POST` | `/api/auth/login` | Public (rate-limited 5/min/IP) | `{ ok: true }` — body: `{ username, password }` |
 | `POST` | `/api/auth/logout` | Public | `{ ok: true }` — clears cookie |
 | `GET`  | `/api/auth/session` | Public | `{ authenticated, configured }` |
 
-Admin endpoints respond `401` when no session cookie is present (or an invalid one). Upload rejects non-multipart bodies with `400`, files over `MAX_UPLOAD_BYTES` with `413`, and unsupported types with `400`.
+Admin endpoints respond `401` when no session cookie is present (or an invalid one). Upload rejects non-multipart bodies with `400`, files over `MAX_UPLOAD_BYTES` with `413`, and unsupported types with `400`. Private-note endpoints return `404` (not `403`) for non-admins so the existence of a private note isn't leaked.
 
 Shareable viewer URL: `https://<your-host>/n/<id>`.
 
@@ -299,10 +323,10 @@ CMD ["npm","run","start"]
 ```
 
 ```bash
-docker build -t crap-note .
+docker build -t crap-notes .
 docker run -d -p 3000:3000 \
   -e ADMIN_USERNAME=… -e ADMIN_PASSWORD=… -e ADMIN_SESSION_SECRET=… \
-  -v $PWD/data:/app/data crap-note
+  -v $PWD/data:/app/data crap-notes
 ```
 
 ---
@@ -342,4 +366,4 @@ docker run -d -p 3000:3000 \
 
 ## License
 
-MIT — do whatever you want, just don't blame anyone if something breaks.
+[MIT](LICENSE) — do whatever you want, just don't blame anyone if something breaks.
