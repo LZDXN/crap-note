@@ -12,10 +12,11 @@ marked.setOptions({
 // or an opening bracket) so we don't trip on currency like "$5". Closing $ may
 // be followed by whitespace, punctuation, or a closing bracket — the official
 // marked-katex-extension omits brackets, which breaks common cases like
-// "…$u \ge 0$)." or "(see $x=1$)".
+// "…$u \ge 0$)." or "(see $x=1$)". Hyphen is included so "$n$-th" / "$x$-axis"
+// don't get greedily merged with a later "$…$" on the same line.
 const OPEN_BOUNDARY = /[\s([{<]/;
 const inlineRule =
-  /^(\${1,2})(?!\$)((?:\\.|[^\\\n])*?(?:\\.|[^\\\n$]))\1(?=[\s?!.,:;)\]}>？！。，：；】」』]|$)/;
+  /^(\${1,2})(?!\$)((?:\\.|[^\\\n])*?(?:\\.|[^\\\n$]))\1(?=[\s\-?!.,:;)\]}>？！。，：；】」』]|$)/;
 const blockRule = /^(\${1,2})\n((?:\\[^]|[^\\])+?)\n\1(?:\n|$)/;
 
 function renderKatex(text: string, displayMode: boolean): string {
