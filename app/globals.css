@@ -119,6 +119,20 @@ body {
 
 .prose-note img { max-width: 100%; border-radius: 6px; }
 
+/* Long display-mode equations would otherwise push the page wider than the
+   viewport on narrow screens. Scroll them horizontally instead, matching the
+   pattern already used for <pre> and <table>. */
+.prose-note .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25em 0;
+  margin: 1.2em 0;
+}
+/* Inline math should never widen the article — allow it to wrap if needed. */
+.prose-note .katex { max-width: 100%; }
+/* Long URLs / unbroken tokens fall back to wrapping mid-word on narrow screens. */
+.prose-note { overflow-wrap: break-word; }
+
 /* ---------- Smooth scroll ---------- */
 html { scroll-behavior: smooth; }
 
