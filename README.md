@@ -16,18 +16,25 @@ A tiny self-hosted web app for **sharing your notes** — drop a Markdown, HTML,
 
 ## Table of contents
 
-1. [Tech stack](#tech-stack)
-2. [Quickstart](#quickstart)
-3. [Admin auth](#admin-auth)
-4. [Production build](#production-build)
-5. [Project structure](#project-structure)
-6. [Configuration](#configuration)
-7. [Data storage](#data-storage)
-8. [HTTP API](#http-api)
-9. [Deployment](#deployment)
-10. [Security notes](#security-notes)
-11. [Roadmap](#roadmap)
-12. [License](#license)
+- [Crap Notes](#crap-notes)
+  - [Table of contents](#table-of-contents)
+  - [Tech stack](#tech-stack)
+  - [Quickstart](#quickstart)
+  - [Admin auth](#admin-auth)
+  - [Production build](#production-build)
+  - [Project structure](#project-structure)
+  - [Configuration](#configuration)
+  - [Data storage](#data-storage)
+    - [Filesystem backend (default)](#filesystem-backend-default)
+    - [Vercel Blob backend](#vercel-blob-backend)
+    - [Metadata shape](#metadata-shape)
+  - [HTTP API](#http-api)
+  - [Deployment](#deployment)
+    - [Vercel (recommended)](#vercel-recommended)
+    - [Any Node host](#any-node-host)
+    - [Docker](#docker)
+  - [Security notes](#security-notes)
+  - [License](#license)
 
 ---
 
@@ -53,29 +60,28 @@ A tiny self-hosted web app for **sharing your notes** — drop a Markdown, HTML,
 
 ```bash
 git clone <your fork>
-cd crap-notess
+cd crap-notes
 
 npm install --legacy-peer-deps   # React 19 peer-dep hint — see note below
 ```
 
-Create a `.env.local` in the project root with the three admin variables (see [Admin auth](#admin-auth) for how to generate them):
+Copy the example env file and fill in the three admin variables (see [Admin auth](#admin-auth) for how to generate them):
 
 ```bash
-ADMIN_USERNAME="<your-username>"
-ADMIN_PASSWORD="<paste a long random string>"
-ADMIN_SESSION_SECRET="<paste a different long random string>"
+cp .env.local.example .env.local
+# then edit .env.local — set ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_SESSION_SECRET
 ```
 
 Then start the dev server:
 
 ```bash
 npm run dev
-# open http://localhost:3000
+# open http://localhost:6969
 ```
 
 **First run**
 
-1. Visit [`/admin/login`](http://localhost:3000/admin/login) and sign in with the credentials you just set.
+1. Visit [`/admin/login`](http://localhost:6969/admin/login) and sign in with the credentials you just set.
 2. You'll land at `/admin` — drop in a `.md`, `.html`, or `.pdf` file.
 3. New uploads are **private by default**. Click **Publish** on a note to make its `/n/<id>` link publicly viewable.
 4. The home page at `/` shows only published notes to anyone not signed in. Signed-in admin sees all notes with a public/private badge.
@@ -95,7 +101,7 @@ Only the admin can upload, delete, or rename notes. Everyone else sees a read-on
 Set three env vars in `.env.local`:
 
 ```bash
-ADMIN_USERNAME="LZDXN"
+ADMIN_USERNAME="ADMIN"
 ADMIN_PASSWORD="<paste a long random string>"
 ADMIN_SESSION_SECRET="<paste a different long random string>"
 ```
@@ -106,7 +112,7 @@ Generate both random values with:
 node -e "const c=require('node:crypto');console.log('PASSWORD='+c.randomBytes(32).toString('base64url'));console.log('SECRET='+c.randomBytes(48).toString('base64url'));"
 ```
 
-Then **restart the dev server** (env changes aren't hot-reloaded) and sign in at [`/admin/login`](http://localhost:3000/admin/login). On success you land at `/admin`, which is the upload + management portal.
+Then **restart the dev server** (env changes aren't hot-reloaded) and sign in at [`/admin/login`](http://localhost:6969/admin/login). On success you land at `/admin`, which is the upload + management portal.
 
 **Session cookie**: HMAC-signed (SHA-256) JSON payload, `httpOnly` + `sameSite=lax`, 7-day TTL. Rotating `ADMIN_SESSION_SECRET` or changing `ADMIN_USERNAME` invalidates all existing sessions.
 
@@ -348,19 +354,6 @@ docker run -d -p 3000:3000 \
 - Serve `/api/notes/:id/raw` from a **separate origin** (e.g. `raw.your-domain.com`) so HTML notes are truly cross-origin even if someone flips `allow-same-origin` back on.
 - Put the app behind your SSO / OAuth reverse proxy instead of the built-in password.
 - Store the admin password as a bcrypt/argon2 hash instead of plaintext.
-
----
-
-## Roadmap
-
-- [ ] Syntax highlighting in Markdown (shiki)
-- [ ] Tags / collections
-- [ ] Server-rendered PDF thumbnails
-- [ ] S3 / R2 storage adapter
-- [ ] Paste-in Markdown (skip the upload step)
-- [ ] `.docx` and `.txt` support
-- [ ] OIDC / SSO replacement for the built-in password
-- [ ] Per-note private links (ACLs on top of the existing private-access storage)
 
 ---
 
