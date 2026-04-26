@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type DragEvent,
@@ -140,6 +141,30 @@ export function AdminClient({ initialNotes, username }: AdminClientProps) {
     const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
     if (res.ok) setNotes((prev) => prev.filter((n) => n.id !== id));
   }, []);
+
+  const handleTogglePin = useCallback(async (id: string, next: boolean) => {
+    const res = await fetch(`/api/notes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned: next }),
+    });
+    if (res.ok) {
+      const { note } = (await res.json()) as { note: NoteRecord };
+      setNotes((prev) => prev.map((n) => (n.id === id ? note : n)));
+    }
+  }, []);
+
+  // Show pinned notes first so the admin can verify the pin state at a glance.
+  const sortedNotes = useMemo(
+    () =>
+      [...notes].sort((a, b) => {
+        const ap = a.pinned ? 1 : 0;
+        const bp = b.pinned ? 1 : 0;
+        if (ap !== bp) return bp - ap;
+        return b.createdAt.localeCompare(a.createdAt);
+      }),
+    [notes],
+  );
 
   const handleToggleVisibility = useCallback(
     async (id: string, next: NoteVisibility) => {
@@ -333,9 +358,10 @@ export function AdminClient({ initialNotes, username }: AdminClientProps) {
             </div>
           ) : (
             <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {notes.map((note) => {
+              {sortedNotes.map((note) => {
                 const visibility = effectiveVisibility(note);
                 const isPrivate = visibility === "private";
+                const isPinned = !!note.pinned;
                 return (
                 <li
                   key={note.id}
@@ -382,6 +408,30 @@ export function AdminClient({ initialNotes, username }: AdminClientProps) {
                     </div>
                   </Link>
                   <div className="mt-3 flex items-center gap-1 text-[11px]">
+                    <button
+                      onClick={() => handleTogglePin(note.id, !isPinned)}
+                      title={isPinned ? "Unpin from top" : "Pin to top"}
+                      aria-label={isPinned ? "Unpin from top" : "Pin to top"}
+                      className={`inline-flex items-center px-2 py-1 rounded border ${
+                        isPinned
+                          ? "text-red-600 border-red-200 bg-red-50 hover:bg-red-100"
+                          : "text-[color:var(--color-dim)] border-[color:var(--color-line)] hover:text-[color:var(--color-ink)] hover:border-[color:var(--color-accent)]"
+                      }`}
+                    >
+                      <svg
+                        width="11"
+                        height="11"
+                        viewBox="0 0 24 24"
+                        fill={isPinned ? "currentColor" : "none"}
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <line x1="12" y1="17" x2="12" y2="22" />
+                        <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+                      </svg>
+                    </button>
                     <button
                       onClick={() =>
                         handleToggleVisibility(note.id, isPrivate ? "public" : "private")

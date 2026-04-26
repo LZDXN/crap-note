@@ -20,6 +20,8 @@ export interface NoteRecord {
   blobPathname?: string;
   /** "public" notes are listed on the home page and viewable by anyone with the link. "private" notes are admin-only. Records written before this field existed are treated as "public" so old links keep working. */
   visibility?: NoteVisibility;
+  /** When true, the note appears in the "Pinned" section above the regular list. Defaults to false. */
+  pinned?: boolean;
 }
 
 /** Resolve a note's effective visibility, defaulting unset (legacy) records to public. */

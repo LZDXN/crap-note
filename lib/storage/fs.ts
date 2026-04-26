@@ -142,3 +142,16 @@ export async function updateNoteVisibility(
   await writeDb(notes);
   return note;
 }
+
+export async function updateNotePinned(
+  id: string,
+  pinned: boolean,
+): Promise<NoteRecord | null> {
+  const notes = await readDb();
+  const note = notes.find((n) => n.id === id);
+  if (!note) return null;
+  note.pinned = pinned;
+  note.updatedAt = new Date().toISOString();
+  await writeDb(notes);
+  return note;
+}

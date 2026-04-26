@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteNote, getNote, updateNoteTitle, updateNoteVisibility } from "@/lib/storage";
+import { deleteNote, getNote, updateNoteTitle, updateNoteVisibility, updateNotePinned } from "@/lib/storage";
 import { effectiveVisibility } from "@/lib/types";
 import { isAuthedRequest, isConfigured } from "@/lib/session";
 
@@ -39,7 +39,7 @@ export async function PATCH(
   const denied = requireAdmin(req);
   if (denied) return denied;
   const { id } = await params;
-  let body: { title?: string; visibility?: string };
+  let body: { title?: string; visibility?: string; pinned?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -58,9 +58,15 @@ export async function PATCH(
     return NextResponse.json({ note });
   }
 
+  if (typeof body.pinned === "boolean") {
+    const note = await updateNotePinned(id, body.pinned);
+    if (!note) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ note });
+  }
+
   if (typeof body.title !== "string") {
     return NextResponse.json(
-      { error: "title or visibility is required." },
+      { error: "title, visibility, or pinned is required." },
       { status: 400 },
     );
   }

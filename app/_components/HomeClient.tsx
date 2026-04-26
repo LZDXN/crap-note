@@ -11,6 +11,66 @@ interface AuthState {
   configured: boolean;
 }
 
+function renderCard(
+  note: NoteRecord,
+  onCopy: (id: string) => void,
+  copiedId: string | null,
+) {
+  return (
+    <li
+      key={note.id}
+      className="group relative rounded-xl border border-[color:var(--color-line)] bg-[color:var(--color-surface)] p-4 hover:border-[color:var(--color-accent)] transition-colors"
+    >
+      <Link href={`/n/${note.id}`} className="block">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5">
+            <KindIcon kind={note.kind} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-[15px] leading-snug break-words">
+              {note.title}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[color:var(--color-dim)]">
+              <span className="uppercase tracking-wider font-medium">
+                {kindLabel(note.kind)}
+              </span>
+              <span className="text-[color:var(--color-muted)]">·</span>
+              <span>{formatBytes(note.size)}</span>
+              <span className="text-[color:var(--color-muted)]">·</span>
+              <span>{formatRelative(note.createdAt)}</span>
+            </div>
+          </div>
+        </div>
+      </Link>
+      <div className="mt-3 flex items-center gap-1 text-[11px]">
+        <button
+          onClick={() => onCopy(note.id)}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded border border-[color:var(--color-line)] text-[color:var(--color-dim)] hover:text-[color:var(--color-ink)] hover:border-[color:var(--color-accent)]"
+        >
+          {copiedId === note.id ? (
+            <>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              Copied
+            </>
+          ) : (
+            <>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
+              Copy link
+            </>
+          )}
+        </button>
+        <a
+          href={`/api/notes/${note.id}/raw?download=1`}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded border border-[color:var(--color-line)] text-[color:var(--color-dim)] hover:text-[color:var(--color-ink)] hover:border-[color:var(--color-accent)]"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
+          Download
+        </a>
+      </div>
+    </li>
+  );
+}
+
 interface HomeClientProps {
   initialNotes: NoteRecord[];
   storageMode: StorageMode;
@@ -36,6 +96,15 @@ export function HomeClient({ initialNotes, storageMode, initialAuth }: HomeClien
       );
     });
   }, [notes, query, filter]);
+
+  const pinnedNotes = useMemo(
+    () => visibleNotes.filter((n) => n.pinned),
+    [visibleNotes],
+  );
+  const regularNotes = useMemo(
+    () => visibleNotes.filter((n) => !n.pinned),
+    [visibleNotes],
+  );
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -139,6 +208,23 @@ export function HomeClient({ initialNotes, storageMode, initialAuth }: HomeClien
       </header>
 
       <main className="mx-auto max-w-5xl px-5 sm:px-8 py-6 sm:py-10 space-y-8">
+        {pinnedNotes.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500">
+                <line x1="12" y1="17" x2="12" y2="22" />
+                <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+              </svg>
+              <h2 className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-dim)] font-semibold">
+                Pinned
+              </h2>
+            </div>
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {pinnedNotes.map((note) => renderCard(note, handleCopy, copiedId))}
+            </ul>
+          </section>
+        )}
+
         <section>
           <div className="flex items-center justify-between gap-3 mb-4">
             <h2 className="font-serif text-lg sm:text-xl">Craps</h2>
@@ -187,61 +273,13 @@ export function HomeClient({ initialNotes, storageMode, initialAuth }: HomeClien
                 ? "No notes yet."
                 : "No notes match your filters."}
             </div>
+          ) : regularNotes.length === 0 ? (
+            <div className="rounded-xl border border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-6 py-10 text-center text-sm text-[color:var(--color-dim)]">
+              No unpinned notes match your filters.
+            </div>
           ) : (
             <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {visibleNotes.map((note) => (
-                <li
-                  key={note.id}
-                  className="group relative rounded-xl border border-[color:var(--color-line)] bg-[color:var(--color-surface)] p-4 hover:border-[color:var(--color-accent)] transition-colors"
-                >
-                  <Link href={`/n/${note.id}`} className="block">
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5">
-                        <KindIcon kind={note.kind} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-[15px] leading-snug break-words">
-                          {note.title}
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[color:var(--color-dim)]">
-                          <span className="uppercase tracking-wider font-medium">
-                            {kindLabel(note.kind)}
-                          </span>
-                          <span className="text-[color:var(--color-muted)]">·</span>
-                          <span>{formatBytes(note.size)}</span>
-                          <span className="text-[color:var(--color-muted)]">·</span>
-                          <span>{formatRelative(note.createdAt)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                  <div className="mt-3 flex items-center gap-1 text-[11px]">
-                    <button
-                      onClick={() => handleCopy(note.id)}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded border border-[color:var(--color-line)] text-[color:var(--color-dim)] hover:text-[color:var(--color-ink)] hover:border-[color:var(--color-accent)]"
-                    >
-                      {copiedId === note.id ? (
-                        <>
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
-                          Copy link
-                        </>
-                      )}
-                    </button>
-                    <a
-                      href={`/api/notes/${note.id}/raw?download=1`}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded border border-[color:var(--color-line)] text-[color:var(--color-dim)] hover:text-[color:var(--color-ink)] hover:border-[color:var(--color-accent)]"
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
-                      Download
-                    </a>
-                  </div>
-                </li>
-              ))}
+              {regularNotes.map((note) => renderCard(note, handleCopy, copiedId))}
             </ul>
           )}
         </section>

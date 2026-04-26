@@ -14,3 +14,4 @@ export const createNote = backend.createNote;
 export const deleteNote = backend.deleteNote;
 export const updateNoteTitle = backend.updateNoteTitle;
 export const updateNoteVisibility = backend.updateNoteVisibility;
+export const updateNotePinned = backend.updateNotePinned;
