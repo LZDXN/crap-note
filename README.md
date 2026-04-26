@@ -3,10 +3,12 @@
 A tiny self-hosted web app for **sharing your notes** — drop a Markdown, HTML, or PDF file in and get a clean, read-only page back. Built originally to publish notes from Claude conversations, but it works for anything you want to read or share.
 
 - **Private by default** — uploads start hidden; one click to publish a shareable link
+- **Pin to top** — important notes get a "Pinned" section above the regular list
 - **Admin-only uploads** behind username + password
 - **Public list** at `/` shows only published notes; signed-in admin sees everything
 - **Per-note viewer** at `/n/<id>` — rendered Markdown (with KaTeX math), sandboxed HTML, inline PDF
 - **Friendly 404** for deleted, missing, or private notes
+- **Mobile-friendly** — header collapses to icon-only buttons, cards reflow to one column
 - **Duplicate-upload rejection** (SHA-256 content hash)
 - **Upload progress** with abort-on-refresh so half-uploaded files never persist
 - **Pluggable storage** — local filesystem for dev, Vercel Blob (private access) for production
@@ -84,7 +86,8 @@ npm run dev
 1. Visit [`/admin/login`](http://localhost:6969/admin/login) and sign in with the credentials you just set.
 2. You'll land at `/admin` — drop in a `.md`, `.html`, or `.pdf` file.
 3. New uploads are **private by default**. Click **Publish** on a note to make its `/n/<id>` link publicly viewable.
-4. The home page at `/` shows only published notes to anyone not signed in. Signed-in admin sees all notes with a public/private badge.
+4. Click the **pin icon** on a note to surface it in the "Pinned" section at the top of the home page.
+5. The home page at `/` shows only published notes to anyone not signed in. Signed-in admin sees all notes with a public/private badge.
 
 The first upload creates `data/` automatically. That folder is git-ignored.
 
@@ -143,7 +146,8 @@ crap-notes/
 │   ├── error.tsx                   # global error boundary — big "XD"
 │   ├── globals.css                 # Tailwind + design tokens + .prose-note
 │   ├── _components/
-│   │   ├── HomeClient.tsx          # client: list + search + filter + copy/download
+│   │   ├── HomeClient.tsx          # client: Pinned section + search/filter + Craps grid + copy/download
+│   │   ├── Footer.tsx              # shared footer with GitHub source link
 │   │   ├── ViewerActions.tsx       # client: copy-link + download buttons
 │   │   ├── HtmlViewer.tsx          # client: sandboxed iframe (no same-origin)
 │   │   ├── PdfViewer.tsx           # client: <object> inline PDF
@@ -152,21 +156,21 @@ crap-notes/
 │   │   ├── page.tsx                # admin portal (server: requires session)
 │   │   ├── login/page.tsx          # login form (server: redirects if already signed in)
 │   │   └── _components/
-│   │       ├── AdminClient.tsx     # uploader + manage list with delete
+│   │       ├── AdminClient.tsx     # uploader + manage list with pin / publish / delete toggles
 │   │       └── LoginClient.tsx     # username/password form
 │   ├── n/[id]/
-│   │   ├── page.tsx                # single-note viewer (server component)
-│   │   └── not-found.tsx           # custom 404
+│   │   ├── page.tsx                # single-note viewer (server component, gates private notes)
+│   │   └── not-found.tsx           # friendly 404 (deleted / missing / private)
 │   └── api/
 │       ├── auth/
 │       │   ├── login/route.ts      # POST — set session cookie (rate-limited)
 │       │   ├── logout/route.ts     # POST — clear cookie
 │       │   └── session/route.ts    # GET  — { authenticated, configured }
 │       └── notes/
-│           ├── route.ts            # GET list · POST upload (admin only)
+│           ├── route.ts            # GET list (visibility-filtered) · POST upload (admin only)
 │           └── [id]/
-│               ├── route.ts        # GET meta · PATCH title · DELETE (admin only)
-│               └── raw/route.ts    # streamed file bytes (rate-limited)
+│               ├── route.ts        # GET meta · PATCH title/visibility/pinned · DELETE (admin only)
+│               └── raw/route.ts    # streamed file bytes (rate-limited, private-gated)
 ├── lib/
 │   ├── session.ts                  # HMAC cookie sign/verify, credential check
 │   ├── rate-limit.ts               # in-memory per-IP fixed-window limiter
@@ -174,9 +178,9 @@ crap-notes/
 │   │   ├── index.ts                # picks backend from BLOB_READ_WRITE_TOKEN
 │   │   ├── fs.ts                   # filesystem backend
 │   │   └── blob.ts                 # Vercel Blob backend (private access)
-│   ├── render.ts                   # marked + DOMPurify sanitizer
+│   ├── render.ts                   # marked + DOMPurify sanitizer (+ KaTeX inline/block math)
 │   ├── format.ts                   # bytes, relative time, labels
-│   └── types.ts                    # NoteRecord, sanitizeFilename, content-disposition
+│   └── types.ts                    # NoteRecord + visibility/pin types, filename + Content-Disposition helpers
 ├── data/                           # ← created at runtime, git-ignored
 │   ├── notes.json
 │   └── files/<id>.<ext>
@@ -256,11 +260,12 @@ npx vercel env pull .env.local
   "contentHash": "…sha256 hex…",
   "blobUrl": "https://....blob.vercel-storage.com/...",
   "blobPathname": "notes/files/AbCd1234eF-abc123.md",
-  "visibility": "private"
+  "visibility": "private",
+  "pinned": false
 }
 ```
 
-`blobUrl` / `blobPathname` are present only for Blob-stored notes. `contentHash` is present for any note uploaded since dedup was added. `visibility` is `"public"` or `"private"`; records written before this field existed are treated as `"public"` so old shared links keep working.
+`blobUrl` / `blobPathname` are present only for Blob-stored notes. `contentHash` is present for any note uploaded since dedup was added. `visibility` is `"public"` or `"private"`; records written before this field existed are treated as `"public"` so old shared links keep working. `pinned` notes appear in the **Pinned** section above the regular list on the home page; default `false`.
 
 ---
 
@@ -271,7 +276,7 @@ npx vercel env pull .env.local
 | `GET`  | `/api/notes` | Public (filtered) / Admin (all) | `{ notes: NoteRecord[] }` — public callers only see `visibility: "public"` notes |
 | `POST` | `/api/notes` | **Admin** | `{ note }` · `201` — uploads default to `private`; rejects duplicates with `409` + reference to existing note |
 | `GET`  | `/api/notes/:id` | Public for public notes / Admin for private | `{ note }` — private notes return `404` to non-admins (hides existence) |
-| `PATCH`| `/api/notes/:id` | **Admin** | `{ note }` — body: `{ "title": "…" }` or `{ "visibility": "public" \| "private" }` |
+| `PATCH`| `/api/notes/:id` | **Admin** | `{ note }` — body: `{ "title": "…" }`, `{ "visibility": "public" \| "private" }`, or `{ "pinned": boolean }` |
 | `DELETE`| `/api/notes/:id` | **Admin** | `{ ok: true }` |
 | `GET`  | `/api/notes/:id/raw` | Public for public notes (rate-limited 60/min/IP) / Admin for private | file bytes, `Content-Disposition: inline` — `404` for private notes when not signed in |
 | `GET`  | `/api/notes/:id/raw?download=1` | Same as above | file bytes, `attachment` |
