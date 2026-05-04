@@ -11,6 +11,7 @@ import { KindIcon } from "@/app/_components/KindIcon";
 import { ViewerActions } from "@/app/_components/ViewerActions";
 import { HtmlViewer } from "@/app/_components/HtmlViewer";
 import { PdfViewer } from "@/app/_components/PdfViewer";
+import { HashTargetHighlight } from "@/app/_components/HashTargetHighlight";
 
 export const dynamic = "force-dynamic";
 
@@ -103,10 +104,13 @@ export default async function NotePage({ params }: Props) {
         </div>
 
         {note.kind === "markdown" && renderedHtml && (
-          <article
-            className="prose-note"
-            dangerouslySetInnerHTML={{ __html: renderedHtml }}
-          />
+          <>
+            <HashTargetHighlight />
+            <article
+              className="prose-note"
+              dangerouslySetInnerHTML={{ __html: renderedHtml }}
+            />
+          </>
         )}
 
         {note.kind === "pdf" && <PdfViewer rawUrl={rawUrl} title={note.title} />}

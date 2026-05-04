@@ -136,6 +136,24 @@ body {
 /* ---------- Smooth scroll ---------- */
 html { scroll-behavior: smooth; }
 
+/* Sticky nav offset so #hash links land below the header instead of under it. */
+.prose-note :is(h1, h2, h3, h4, h5, h6)[id] {
+  scroll-margin-top: 72px;
+}
+
+/* Brief highlight on the heading targeted by the URL hash. The class is
+   removed on the next user input, and the resulting fade is what the
+   transition animates. */
+.prose-note :is(h1, h2, h3, h4, h5, h6) {
+  border-radius: 6px;
+  transition: background-color 600ms ease, box-shadow 600ms ease;
+}
+.prose-note :is(h1, h2, h3, h4, h5, h6).is-hash-target {
+  background-color: var(--color-accent-soft);
+  box-shadow: 0 0 0 6px var(--color-accent-soft);
+  transition: none;
+}
+
 /* ---------- Scrollbar ---------- */
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-thumb { background: #d4d9e4; border-radius: 10px; border: 2px solid var(--color-bg); }

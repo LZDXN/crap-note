@@ -1,4 +1,4 @@
-import { marked, type TokenizerAndRendererExtension } from "marked";
+import { marked, type TokenizerAndRendererExtension, type Tokens } from "marked";
 import katex from "katex";
 import createDOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
@@ -6,6 +6,46 @@ import { JSDOM } from "jsdom";
 marked.setOptions({
   gfm: true,
   breaks: false,
+});
+
+// Heading id generation. The slug rule mirrors the format used in markdown
+// table-of-contents links: lowercase, drop punctuation other than `_-`, and
+// turn each whitespace char into a `-` (so " & " → "--", matching GitHub).
+// Counts are kept in a module-level map and reset at the start of each render
+// so duplicate headings get -1, -2, … suffixes deterministically. Safe because
+// renderMarkdown is fully synchronous.
+const slugCounts = new Map<string, number>();
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .replace(/\s/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function uniqueSlug(text: string): string {
+  const base = slugify(text);
+  if (!base) return "";
+  const seen = slugCounts.get(base);
+  if (seen === undefined) {
+    slugCounts.set(base, 0);
+    return base;
+  }
+  const next = seen + 1;
+  slugCounts.set(base, next);
+  return `${base}-${next}`;
+}
+
+marked.use({
+  renderer: {
+    heading(token: Tokens.Heading): string {
+      const inner = this.parser.parseInline(token.tokens);
+      const slug = uniqueSlug(token.text);
+      const idAttr = slug ? ` id="${slug}"` : "";
+      return `<h${token.depth}${idAttr}>${inner}</h${token.depth}>\n`;
+    },
+  },
 });
 
 // Inline: $…$ or $$…$$. Opening $ must sit at a word boundary (start, whitespace,
@@ -83,6 +123,7 @@ const jsdomWindow = new JSDOM("").window;
 const DOMPurify = createDOMPurify(jsdomWindow as any);
 
 export function renderMarkdown(source: string): string {
+  slugCounts.clear();
   const html = marked.parse(source, { async: false }) as string;
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true, mathMl: true, svg: true },
