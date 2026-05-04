@@ -12,6 +12,7 @@ import { ViewerActions } from "@/app/_components/ViewerActions";
 import { HtmlViewer } from "@/app/_components/HtmlViewer";
 import { PdfViewer } from "@/app/_components/PdfViewer";
 import { HashTargetHighlight } from "@/app/_components/HashTargetHighlight";
+import { BackToTopButton } from "@/app/_components/BackToTopButton";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +107,7 @@ export default async function NotePage({ params }: Props) {
         {note.kind === "markdown" && renderedHtml && (
           <>
             <HashTargetHighlight />
+            <BackToTopButton />
             <article
               className="prose-note"
               dangerouslySetInnerHTML={{ __html: renderedHtml }}
